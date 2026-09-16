@@ -4,18 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/trace/noop"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/froppa/orders-service/internal/application/commands"
 	"github.com/froppa/orders-service/internal/application/ports"
 	"github.com/froppa/orders-service/internal/application/queries"
 	"github.com/froppa/orders-service/internal/domain/orders"
+	"github.com/froppa/orders-service/internal/observability"
 )
 
 type handlerClock struct {
@@ -58,18 +64,74 @@ func (handlerOutboxRepo) MarkDispatched(context.Context, ports.DBTX, string, tim
 }
 
 func TestHealthHandlers(t *testing.T) {
-	ready := NewHealthHandler(func(context.Context) error { return nil })
+	ready := NewHealthHandler(zap.NewNop(), func(context.Context) error { return nil })
 	healthResp := httptest.NewRecorder()
 	ready.Healthz(healthResp, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if healthResp.Code != http.StatusOK {
 		t.Fatalf("health status = %d", healthResp.Code)
 	}
 
-	notReady := NewHealthHandler(func(context.Context) error { return context.DeadlineExceeded })
+	notReady := NewHealthHandler(zap.NewNop(), func(context.Context) error { return context.DeadlineExceeded })
 	readyResp := httptest.NewRecorder()
 	notReady.Readyz(readyResp, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if readyResp.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready status = %d", readyResp.Code)
+	}
+}
+
+func TestReadyzLogsCauseInsteadOfReturningIt(t *testing.T) {
+	const causeDetail = "10.0.0.7:5432"
+	core, logs := observer.New(zapcore.DebugLevel)
+	handler := NewHealthHandler(zap.New(core), func(context.Context) error {
+		return errors.New("dial tcp " + causeDetail + ": connect: connection refused")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req = req.WithContext(observability.WithRequestID(req.Context(), "req-1"))
+	resp := httptest.NewRecorder()
+	handler.Readyz(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	if strings.Contains(resp.Body.String(), causeDetail) {
+		t.Fatalf("response body leaked the readiness error: %s", resp.Body.String())
+	}
+
+	var body struct {
+		Error struct {
+			Code    string         `json:"code"`
+			Message string         `json:"message"`
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Error.Code != "not_ready" || body.Error.Message != "service is not ready" {
+		t.Fatalf("error = %+v", body.Error)
+	}
+	if body.Error.Details != nil {
+		t.Fatalf("details = %v, want nil", body.Error.Details)
+	}
+
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("log entries = %d, want 1", len(entries))
+	}
+	entry := entries[0]
+	if entry.Level != zapcore.WarnLevel {
+		t.Fatalf("level = %s, want warn", entry.Level)
+	}
+	if strings.Contains(entry.Message, causeDetail) {
+		t.Fatalf("log message embeds the cause instead of a zap.Error field: %s", entry.Message)
+	}
+	fields := entry.ContextMap()
+	if loggedErr, _ := fields["error"].(string); !strings.Contains(loggedErr, causeDetail) {
+		t.Fatalf("error field = %v, want the readiness error", fields["error"])
+	}
+	if fields["request_id"] != "req-1" {
+		t.Fatalf("request_id = %v, want req-1", fields["request_id"])
 	}
 }
 
