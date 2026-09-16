@@ -122,7 +122,7 @@ func TestCreateOrderAndReplayIdempotency(t *testing.T) {
 		Metrics:       metrics,
 		Idempotency:   &memoryIdempotencyRepo{records: make(map[string]ports.IdempotencyRecord)},
 		Transactor:    transactor,
-		HealthHandler: handlers.NewHealthHandler(func(context.Context) error { return nil }),
+		HealthHandler: handlers.NewHealthHandler(logger, func(context.Context) error { return nil }),
 		CreateOrder:   createHandler,
 		GetOrder:      getHandler,
 	})
@@ -183,7 +183,7 @@ func TestIdempotencyConflict(t *testing.T) {
 		Metrics:       metrics,
 		Idempotency:   &memoryIdempotencyRepo{records: make(map[string]ports.IdempotencyRecord)},
 		Transactor:    transactor,
-		HealthHandler: handlers.NewHealthHandler(func(context.Context) error { return nil }),
+		HealthHandler: handlers.NewHealthHandler(logger, func(context.Context) error { return nil }),
 		CreateOrder:   handlers.NewOrdersCreateHandler(commands.NewCreateOrderHandler(testClock{now: time.Now()}, transactor, ordersRepo, memoryOutboxRepo{}, tracer)),
 		GetOrder:      handlers.NewOrdersGetHandler(queries.NewGetOrderHandler(transactor, ordersRepo, tracer)),
 	})
