@@ -46,6 +46,7 @@ func (r *handlerOrdersRepo) Create(_ context.Context, _ ports.DBTX, order orders
 	r.order = order
 	return nil
 }
+
 func (r *handlerOrdersRepo) GetByID(_ context.Context, _ ports.DBTX, id string) (orders.Order, error) {
 	if r.order.ID != id {
 		return orders.Order{}, orders.ErrNotFound
@@ -59,6 +60,7 @@ func (handlerOutboxRepo) Add(context.Context, ports.DBTX, ports.OutboxMessage) e
 func (handlerOutboxRepo) ListPending(context.Context, ports.DBTX, int) ([]ports.OutboxMessage, error) {
 	return nil, nil
 }
+
 func (handlerOutboxRepo) MarkDispatched(context.Context, ports.DBTX, string, time.Time) error {
 	return nil
 }
@@ -71,11 +73,29 @@ func TestHealthHandlers(t *testing.T) {
 		t.Fatalf("health status = %d", healthResp.Code)
 	}
 
-	notReady := NewHealthHandler(zap.NewNop(), func(context.Context) error { return context.DeadlineExceeded })
+	const readyCause = "10.1.2.3:5432"
+	notReady := NewHealthHandler(zap.NewNop(), func(context.Context) error {
+		return errors.New("dial tcp " + readyCause + ": connect: connection refused")
+	})
 	readyResp := httptest.NewRecorder()
 	notReady.Readyz(readyResp, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if readyResp.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready status = %d", readyResp.Code)
+	}
+	if strings.Contains(readyResp.Body.String(), readyCause) {
+		t.Fatalf("readyz body leaked the readiness cause: %s", readyResp.Body.String())
+	}
+
+	var readyBody struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(readyResp.Body.Bytes(), &readyBody); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if readyBody.Error.Code != "not_ready" {
+		t.Fatalf("error code = %q, want not_ready", readyBody.Error.Code)
 	}
 }
 

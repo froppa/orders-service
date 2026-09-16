@@ -35,6 +35,7 @@ func (o *dispatcherOutbox) Add(context.Context, ports.DBTX, ports.OutboxMessage)
 func (o *dispatcherOutbox) ListPending(context.Context, ports.DBTX, int) ([]ports.OutboxMessage, error) {
 	return o.messages, nil
 }
+
 func (o *dispatcherOutbox) MarkDispatched(_ context.Context, _ ports.DBTX, id string, _ time.Time) error {
 	o.marked = append(o.marked, id)
 	return nil
