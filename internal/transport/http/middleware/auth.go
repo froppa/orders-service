@@ -19,7 +19,11 @@ type errorBody struct {
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))
-		if !strings.HasPrefix(header, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")) == "" {
+		// RFC 7235 auth-scheme is case-insensitive.
+		scheme, token, _ := strings.Cut(header, " ")
+		if !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
+			// RFC 7235 3.1: a 401 MUST carry a challenge.
+			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized", "bearer token required", nil)
 			return
 		}

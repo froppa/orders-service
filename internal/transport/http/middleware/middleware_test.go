@@ -70,6 +70,29 @@ func TestAuth(t *testing.T) {
 	if resp.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", resp.Code)
 	}
+	if resp.Header().Get("WWW-Authenticate") != "Bearer" {
+		t.Fatalf("WWW-Authenticate = %q", resp.Header().Get("WWW-Authenticate"))
+	}
+
+	for _, header := range []string{"Bearer token", "bearer token", "BEARER token"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", header)
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, req)
+		if resp.Code != http.StatusNoContent {
+			t.Fatalf("status for %q = %d", header, resp.Code)
+		}
+	}
+
+	for _, header := range []string{"Bearer", "Bearer   ", "Basic token"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", header)
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, req)
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("status for %q = %d", header, resp.Code)
+		}
+	}
 }
 
 func TestRequestID(t *testing.T) {
