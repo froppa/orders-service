@@ -29,6 +29,7 @@ type middlewareDBTX struct{}
 func (middlewareDBTX) ExecContext(context.Context, string, ...any) (sql.Result, error) {
 	return nil, nil
 }
+
 func (middlewareDBTX) QueryContext(context.Context, string, ...any) (*sql.Rows, error) {
 	return nil, nil
 }
@@ -45,6 +46,7 @@ func (m *memoryIdempotency) Get(_ context.Context, _ ports.DBTX, key string) (po
 	}
 	return ports.IdempotencyRecord{}, ports.ErrIdempotencyKeyNotFound
 }
+
 func (m *memoryIdempotency) Reserve(_ context.Context, _ ports.DBTX, record ports.IdempotencyRecord) (bool, error) {
 	if _, ok := m.records[record.Key]; ok {
 		return false, nil
@@ -52,6 +54,7 @@ func (m *memoryIdempotency) Reserve(_ context.Context, _ ports.DBTX, record port
 	m.records[record.Key] = record
 	return true, nil
 }
+
 func (m *memoryIdempotency) Finalize(_ context.Context, _ ports.DBTX, key string, responseCode int, responseBody []byte) error {
 	record := m.records[key]
 	record.ResponseCode = responseCode

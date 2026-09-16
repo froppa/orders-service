@@ -36,6 +36,7 @@ func (invalidOutboxRepo) Add(context.Context, ports.DBTX, ports.OutboxMessage) e
 func (invalidOutboxRepo) ListPending(context.Context, ports.DBTX, int) ([]ports.OutboxMessage, error) {
 	return nil, nil
 }
+
 func (invalidOutboxRepo) MarkDispatched(context.Context, ports.DBTX, string, time.Time) error {
 	return nil
 }

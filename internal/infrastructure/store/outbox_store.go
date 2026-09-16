@@ -67,6 +67,4 @@ func (s *OutboxStore) MarkDispatched(ctx context.Context, q ports.DBTX, id strin
 	return err
 }
 
-var (
-	_ = sql.NullTime{}
-)
+var _ = sql.NullTime{}

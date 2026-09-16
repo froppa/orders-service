@@ -67,6 +67,7 @@ func (memoryOutboxRepo) Add(context.Context, ports.DBTX, ports.OutboxMessage) er
 func (memoryOutboxRepo) ListPending(context.Context, ports.DBTX, int) ([]ports.OutboxMessage, error) {
 	return nil, nil
 }
+
 func (memoryOutboxRepo) MarkDispatched(context.Context, ports.DBTX, string, time.Time) error {
 	return nil
 }
