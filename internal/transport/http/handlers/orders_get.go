@@ -20,7 +20,7 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	order, err := h.useCase.Handle(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		status, code, message := mapDomainError(err)
-		writeError(w, status, code, message, nil)
+		writeError(w, status, code, message)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

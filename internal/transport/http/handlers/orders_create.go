@@ -22,7 +22,7 @@ func NewOrdersCreateHandler(useCase *commands.CreateOrderHandler) *OrdersCreateH
 func (h *OrdersCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON", nil)
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return
 	}
 	order, err := h.useCase.Handle(r.Context(), commands.CreateOrderCommand{
@@ -31,7 +31,7 @@ func (h *OrdersCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		status, code, message := mapDomainError(err)
-		writeError(w, status, code, message, nil)
+		writeError(w, status, code, message)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{

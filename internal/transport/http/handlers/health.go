@@ -28,18 +28,17 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, _ *http.Request) {
 func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 	if err := h.ready(r.Context()); err != nil {
 		observability.WithContext(r.Context(), h.logger).Warn("readiness check failed", zap.Error(err))
-		writeError(w, http.StatusServiceUnavailable, "not_ready", "service is not ready", nil)
+		writeError(w, http.StatusServiceUnavailable, "not_ready", "service is not ready")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-func writeError(w http.ResponseWriter, status int, code, message string, details map[string]any) {
+func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{
 		"error": map[string]any{
 			"code":    code,
 			"message": message,
-			"details": details,
 		},
 	})
 }
