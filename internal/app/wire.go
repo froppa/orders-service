@@ -58,7 +58,7 @@ func Build(ctx context.Context, cfg config.Config) (*App, error) {
 	getOrder := queries.NewGetOrderHandler(database, ordersStore, tracer)
 	dispatcher := outbox.NewDispatcher(clock, database, outboxStore, publisher, logger, metrics, tracer)
 	backgroundWorker := worker.New(cfg.WorkerInterval, dispatcher, logger)
-	health := handlers.NewHealthHandler(func(ctx context.Context) error {
+	health := handlers.NewHealthHandler(logger, func(ctx context.Context) error {
 		return database.Ping(ctx)
 	})
 	server := httptransport.NewServer(httptransport.Dependencies{

@@ -34,6 +34,7 @@ func (w *workerOutbox) ListPending(context.Context, ports.DBTX, int) ([]ports.Ou
 	w.calls++
 	return nil, nil
 }
+
 func (w *workerOutbox) MarkDispatched(context.Context, ports.DBTX, string, time.Time) error {
 	return nil
 }

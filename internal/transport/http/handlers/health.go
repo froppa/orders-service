@@ -6,15 +6,19 @@ import (
 	"errors"
 	"net/http"
 
+	"go.uber.org/zap"
+
 	"github.com/froppa/orders-service/internal/domain/orders"
+	"github.com/froppa/orders-service/internal/observability"
 )
 
 type HealthHandler struct {
-	ready func(context.Context) error
+	logger *zap.Logger
+	ready  func(context.Context) error
 }
 
-func NewHealthHandler(ready func(context.Context) error) *HealthHandler {
-	return &HealthHandler{ready: ready}
+func NewHealthHandler(logger *zap.Logger, ready func(context.Context) error) *HealthHandler {
+	return &HealthHandler{logger: logger, ready: ready}
 }
 
 func (h *HealthHandler) Healthz(w http.ResponseWriter, _ *http.Request) {
@@ -23,18 +27,18 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, _ *http.Request) {
 
 func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 	if err := h.ready(r.Context()); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "not_ready", "service is not ready", map[string]any{"cause": err.Error()})
+		observability.WithContext(r.Context(), h.logger).Warn("readiness check failed", zap.Error(err))
+		writeError(w, http.StatusServiceUnavailable, "not_ready", "service is not ready")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-func writeError(w http.ResponseWriter, status int, code, message string, details map[string]any) {
+func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{
 		"error": map[string]any{
 			"code":    code,
 			"message": message,
-			"details": details,
 		},
 	})
 }
