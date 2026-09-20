@@ -207,6 +207,34 @@ func TestGetOrderRequiresAuth(t *testing.T) {
 	}
 }
 
+func TestReadyzDoesNotRequireAuth(t *testing.T) {
+	cfg := config.Config{ServiceName: "orders-service", Env: "test", HTTPAddr: ":0", LogLevel: "debug"}
+	logger := zap.NewNop()
+	transactor := &memoryTransactor{tx: noopDBTX{}}
+
+	server := NewServer(Dependencies{
+		Config:        cfg,
+		Logger:        logger,
+		Metrics:       observability.NewMetrics(),
+		Idempotency:   &memoryIdempotencyRepo{records: make(map[string]ports.IdempotencyRecord)},
+		Transactor:    transactor,
+		HealthHandler: handlers.NewHealthHandler(logger, func(context.Context) error { return nil }),
+		CreateOrder:   http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		GetOrder:      http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	resp := httptest.NewRecorder()
+	server.Handler.ServeHTTP(resp, req)
+
+	if resp.Code == http.StatusUnauthorized {
+		t.Fatalf("readiness probe demanded credentials: status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
 func TestIdempotencyConflict(t *testing.T) {
 	cfg := config.Config{ServiceName: "orders-service", Env: "test", HTTPAddr: ":0", LogLevel: "debug"}
 	logger := zap.NewNop()
