@@ -38,7 +38,7 @@ func NewServer(deps Dependencies) *http.Server {
 
 	router.Route("/v1", func(r chi.Router) {
 		r.With(middleware.Auth, middleware.Idempotency(deps.Idempotency, deps.Transactor, deps.Logger)).Post("/orders", deps.CreateOrder.ServeHTTP)
-		r.Get("/orders/{id}", deps.GetOrder.ServeHTTP)
+		r.With(middleware.Auth).Get("/orders/{id}", deps.GetOrder.ServeHTTP)
 	})
 
 	return &http.Server{
