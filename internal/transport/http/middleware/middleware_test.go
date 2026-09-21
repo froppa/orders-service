@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -182,5 +183,35 @@ func TestIdempotencyConflict(t *testing.T) {
 	handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("status = %d", resp.Code)
+	}
+}
+
+func TestIdempotencyMissingKey(t *testing.T) {
+	repo := &memoryIdempotency{records: make(map[string]ports.IdempotencyRecord)}
+	logger := zap.NewNop()
+	called := false
+	handler := Idempotency(repo, middlewareTransactor{tx: middlewareDBTX{}}, logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/orders", bytes.NewBufferString(`{"customer_id":"cust-1","amount_cents":500}`))
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	var body errorEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != "missing_idempotency_key" {
+		t.Fatalf("error code = %q", body.Error.Code)
+	}
+	if called {
+		t.Fatal("next handler should not be called")
+	}
+	if len(repo.records) != 0 {
+		t.Fatalf("records = %d, want 0", len(repo.records))
 	}
 }
