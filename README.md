@@ -71,3 +71,13 @@ make test
 
 Runs `go test ./...` plus a coverage gate (80%) over the core packages
 (excluding `cmd/` and the wiring package).
+
+## Troubleshooting
+
+- **401 from `POST /v1/orders`**: the bearer token is missing or wrong; send
+  `Authorization: Bearer <token>` with a non-empty token. The error (message
+  `bearer token required`) comes from
+  `internal/transport/http/middleware/auth.go`.
+- **503 from `GET /readyz`**: a dependency (Postgres) is not ready yet; the
+  service log records the cause as `readiness check failed`. The error (code
+  `not_ready`) comes from `internal/transport/http/handlers/health.go`.
