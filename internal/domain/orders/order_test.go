@@ -38,4 +38,7 @@ func TestNewRejectsInvalidInput(t *testing.T) {
 	if _, err := New("cust-123", 0, now); err != ErrInvalidAmount {
 		t.Fatalf("expected ErrInvalidAmount, got %v", err)
 	}
+	if _, err := New("cust-123", -100, now); err != ErrInvalidAmount {
+		t.Fatalf("expected ErrInvalidAmount, got %v", err)
+	}
 }
