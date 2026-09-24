@@ -3,7 +3,10 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -182,5 +185,46 @@ func TestIdempotencyConflict(t *testing.T) {
 	handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("status = %d", resp.Code)
+	}
+}
+
+func TestIdempotencyInProgress(t *testing.T) {
+	body := `{"customer_id":"cust-1","amount_cents":500}`
+	hash := sha256.Sum256([]byte(body))
+	repo := &memoryIdempotency{records: map[string]ports.IdempotencyRecord{
+		"req-1": {
+			Key:          "req-1",
+			RequestHash:  hex.EncodeToString(hash[:]),
+			ResponseCode: 0,
+			ResponseBody: []byte(`{}`),
+			CreatedAt:    time.Now().UTC(),
+		},
+	}}
+	called := false
+	handler := Idempotency(repo, middlewareTransactor{tx: middlewareDBTX{}}, zap.NewNop())(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/orders", bytes.NewBufferString(body))
+	req.Header.Set("Idempotency-Key", "req-1")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	var errBody struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if errBody.Error.Code != "request_in_progress" {
+		t.Fatalf("error code = %q", errBody.Error.Code)
+	}
+	if called {
+		t.Fatal("next handler called for in-progress request")
 	}
 }
