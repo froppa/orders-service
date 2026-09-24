@@ -164,10 +164,74 @@ func TestCreateOrderAndReplayIdempotency(t *testing.T) {
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/v1/orders/"+orderID, nil)
+	getReq.Header.Set("Authorization", "Bearer token")
 	getResp := httptest.NewRecorder()
 	server.Handler.ServeHTTP(getResp, getReq)
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("get status = %d body=%s", getResp.Code, getResp.Body.String())
+	}
+}
+
+func TestGetOrderRequiresAuth(t *testing.T) {
+	cfg := config.Config{ServiceName: "orders-service", Env: "test", HTTPAddr: ":0", LogLevel: "debug"}
+	logger := zap.NewNop()
+	transactor := &memoryTransactor{tx: noopDBTX{}}
+
+	reached := false
+	server := NewServer(Dependencies{
+		Config:        cfg,
+		Logger:        logger,
+		Metrics:       observability.NewMetrics(),
+		Idempotency:   &memoryIdempotencyRepo{records: make(map[string]ports.IdempotencyRecord)},
+		Transactor:    transactor,
+		HealthHandler: handlers.NewHealthHandler(logger, func(context.Context) error { return nil }),
+		CreateOrder:   http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		GetOrder: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			reached = true
+			w.WriteHeader(http.StatusOK)
+		}),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/orders/order-1", nil)
+	resp := httptest.NewRecorder()
+	server.Handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	if got := resp.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("WWW-Authenticate = %q, want %q", got, "Bearer")
+	}
+	if reached {
+		t.Fatal("query handler was reached without authentication")
+	}
+}
+
+func TestReadyzDoesNotRequireAuth(t *testing.T) {
+	cfg := config.Config{ServiceName: "orders-service", Env: "test", HTTPAddr: ":0", LogLevel: "debug"}
+	logger := zap.NewNop()
+	transactor := &memoryTransactor{tx: noopDBTX{}}
+
+	server := NewServer(Dependencies{
+		Config:        cfg,
+		Logger:        logger,
+		Metrics:       observability.NewMetrics(),
+		Idempotency:   &memoryIdempotencyRepo{records: make(map[string]ports.IdempotencyRecord)},
+		Transactor:    transactor,
+		HealthHandler: handlers.NewHealthHandler(logger, func(context.Context) error { return nil }),
+		CreateOrder:   http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		GetOrder:      http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	resp := httptest.NewRecorder()
+	server.Handler.ServeHTTP(resp, req)
+
+	if resp.Code == http.StatusUnauthorized {
+		t.Fatalf("readiness probe demanded credentials: status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
 	}
 }
 
